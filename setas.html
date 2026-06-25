@@ -131,7 +131,7 @@
     <div class="card">
       <div class="emoji" aria-hidden="true">🍄</div>
       <h1>Camino de setas</h1>
-      <p>Camina por el bosque y recoge setas mirándolas. Avanzas solo — ¡no te pierdas ninguna!</p>
+      <p>Recorre el bosque de izquierda a derecha — como al leer — y recoge setas mirándolas. Avanzas solo; ¡no te pierdas ninguna!</p>
       <div class="settings" aria-label="Ajustes de velocidad">
         <h2>Velocidades</h2>
         <div class="setting">
@@ -216,15 +216,15 @@
     let flowers = [];
     let running = false;
     let raf = 0;
-    let playerY = 0;
-    let cameraY = 0;
+    let playerX = 0;
+    let cameraX = 0;
     let finished = false;
     let popEffects = [];
 
-    function pathX(worldY) {
-      return canvas.width * 0.5
-        + Math.sin(worldY * 0.0045) * canvas.width * 0.22
-        + Math.sin(worldY * 0.011 + 1.2) * canvas.width * 0.08;
+    function pathY(worldX) {
+      return canvas.height * 0.5
+        + Math.sin(worldX * 0.0045) * canvas.height * 0.22
+        + Math.sin(worldX * 0.011 + 1.2) * canvas.height * 0.08;
     }
 
     function resize() {
@@ -318,7 +318,14 @@
     }
 
     function worldToScreen(wx, wy) {
-      return { x: wx, y: wy - cameraY };
+      return { x: wx - cameraX, y: wy };
+    }
+
+    function viewBoundsX(pad = 80) {
+      return {
+        left: cameraX - pad,
+        right: cameraX + canvas.width + pad,
+      };
     }
 
     function generateWorld() {
@@ -327,14 +334,14 @@
       flowers = [];
 
       const step = 180;
-      for (let y = 320; y < PATH_LENGTH; y += step) {
-        const px = pathX(y);
+      for (let x = 320; x < PATH_LENGTH; x += step) {
+        const py = pathY(x);
         const side = Math.random() < 0.5 ? -1 : 1;
         const offset = rand(55, 110) * side;
         const type = MUSHROOM_TYPES[Math.floor(Math.random() * MUSHROOM_TYPES.length)];
         mushrooms.push({
-          x: px + offset,
-          y,
+          x,
+          y: py + offset,
           type,
           collected: false,
           dwell: 0,
@@ -344,22 +351,22 @@
         });
       }
 
-      for (let y = 0; y < PATH_LENGTH + 400; y += rand(90, 160)) {
-        const px = pathX(y);
+      for (let x = 0; x < PATH_LENGTH + 400; x += rand(90, 160)) {
+        const py = pathY(x);
         const side = Math.random() < 0.5 ? -1 : 1;
         trees.push({
-          x: px + side * rand(130, 280),
-          y,
+          x,
+          y: py + side * rand(130, 280),
           r: rand(28, 52),
           hue: rand(100, 145),
         });
       }
 
-      for (let y = 100; y < PATH_LENGTH; y += rand(60, 120)) {
-        const px = pathX(y);
+      for (let x = 100; x < PATH_LENGTH; x += rand(60, 120)) {
+        const py = pathY(x);
         flowers.push({
-          x: px + rand(-200, 200),
-          y,
+          x: x + rand(-30, 30),
+          y: py + rand(-200, 200),
           color: ['#ff6b9d', '#ffd166', '#a8e6cf', '#dda0dd', '#87ceeb'][Math.floor(Math.random() * 5)],
           size: rand(4, 8),
         });
@@ -369,7 +376,7 @@
     }
 
     function drawBackground() {
-      const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, 0);
       grad.addColorStop(0, '#2d5a27');
       grad.addColorStop(0.5, '#3d7a35');
       grad.addColorStop(1, '#4a8f40');
@@ -378,10 +385,9 @@
     }
 
     function drawTrees() {
-      const viewTop = cameraY - 80;
-      const viewBot = cameraY + canvas.height + 80;
+      const { left, right } = viewBoundsX();
       for (const t of trees) {
-        if (t.y < viewTop || t.y > viewBot) continue;
+        if (t.x < left || t.x > right) continue;
         const s = worldToScreen(t.x, t.y);
         ctx.save();
         ctx.translate(s.x, s.y);
@@ -408,12 +414,11 @@
     }
 
     function drawPath() {
-      const viewTop = cameraY - 100;
-      const viewBot = cameraY + canvas.height + 100;
-      const startY = Math.max(0, Math.floor(viewTop / 20) * 20);
+      const { left, right } = viewBoundsX(100);
+      const startX = Math.max(0, Math.floor(left / 20) * 20);
       const points = [];
-      for (let y = startY; y <= viewBot; y += 20) {
-        points.push({ x: pathX(y), y });
+      for (let x = startX; x <= right; x += 20) {
+        points.push({ x, y: pathY(x) });
       }
       if (points.length < 2) return;
 
@@ -450,21 +455,20 @@
       }
       ctx.stroke();
 
-      for (let y = startY; y <= viewBot; y += 48) {
-        const px = pathX(y);
-        const s = worldToScreen(px, y);
+      for (let x = startX; x <= right; x += 48) {
+        const py = pathY(x);
+        const s = worldToScreen(x, py);
         ctx.fillStyle = 'rgba(90,70,30,.18)';
         ctx.beginPath();
-        ctx.ellipse(s.x, s.y, 3, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(s.x, s.y, 6, 3, 0, 0, Math.PI * 2);
         ctx.fill();
       }
     }
 
     function drawFlowers() {
-      const viewTop = cameraY - 40;
-      const viewBot = cameraY + canvas.height + 40;
+      const { left, right } = viewBoundsX(40);
       for (const f of flowers) {
-        if (f.y < viewTop || f.y > viewBot) continue;
+        if (f.x < left || f.x > right) continue;
         const s = worldToScreen(f.x, f.y);
         ctx.fillStyle = f.color;
         for (let i = 0; i < 5; i++) {
@@ -483,6 +487,7 @@
     function drawMushroom(m, time) {
       if (m.collected && m.pop <= 0) return;
       const s = worldToScreen(m.x, m.y);
+      if (s.x < -60 || s.x > canvas.width + 60) return;
       if (s.y < -60 || s.y > canvas.height + 60) return;
 
       const wobble = Math.sin(time * 0.003 + m.wobble) * 3;
@@ -524,12 +529,13 @@
     }
 
     function drawPlayer() {
-      const px = pathX(playerY);
-      const s = worldToScreen(px, playerY);
+      const py = pathY(playerX);
+      const s = worldToScreen(playerX, py);
       const bob = Math.sin(Date.now() * 0.008) * 3;
 
       ctx.save();
       ctx.translate(s.x, s.y + bob);
+      ctx.scale(-1, 1);
 
       ctx.fillStyle = 'rgba(0,0,0,.2)';
       ctx.beginPath();
@@ -561,19 +567,20 @@
     }
 
     function drawFinish() {
-      const fy = PATH_LENGTH - 40;
-      if (fy < cameraY - 100 || fy > cameraY + canvas.height + 100) return;
-      const px = pathX(fy);
-      const s = worldToScreen(px, fy);
+      const fx = PATH_LENGTH - 40;
+      const { left, right } = viewBoundsX(100);
+      if (fx < left || fx > right) return;
+      const py = pathY(fx);
+      const s = worldToScreen(fx, py);
 
       ctx.save();
       ctx.translate(s.x, s.y);
       ctx.fillStyle = '#5a3e2b';
-      ctx.fillRect(-40, -10, 80, 12);
+      ctx.fillRect(-6, -55, 12, 110);
       ctx.fillStyle = '#7ddf6a';
       ctx.font = 'bold 14px system-ui';
       ctx.textAlign = 'center';
-      ctx.fillText('META', 0, -18);
+      ctx.fillText('META', 0, -62);
       ctx.restore();
     }
 
@@ -618,11 +625,11 @@
       const dt = 16;
 
       if (running && !finished) {
-        playerY += gameConfig.walkSpeed;
-        cameraY = playerY - canvas.height * 0.62;
-        progressFill.style.width = `${Math.min(100, (playerY / PATH_LENGTH) * 100)}%`;
+        playerX += gameConfig.walkSpeed;
+        cameraX = playerX - canvas.width * 0.28;
+        progressFill.style.width = `${Math.min(100, (playerX / PATH_LENGTH) * 100)}%`;
 
-        if (playerY >= PATH_LENGTH) {
+        if (playerX >= PATH_LENGTH) {
           finished = true;
           running = false;
           const total = mushrooms.length;
@@ -667,8 +674,8 @@
       winMsg.classList.remove('show');
       score = 0;
       scoreEl.textContent = '0';
-      playerY = 0;
-      cameraY = -canvas.height * 0.62;
+      playerX = 0;
+      cameraX = -canvas.width * 0.28;
       gazeTrail = [];
       fixation = 0;
       stabilityEl.textContent = '—';
