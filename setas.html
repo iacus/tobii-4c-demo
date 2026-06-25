@@ -10,8 +10,9 @@
     html, body {
       margin: 0; height: 100%; overflow: hidden;
       font: 16px/1.4 system-ui, sans-serif;
-      background: #1a3a1a; cursor: none;
+      background: #1a3a1a;
     }
+    body.game-running { cursor: none; }
     #game-canvas {
       position: fixed; inset: 0; width: 100%; height: 100%;
       display: block;
@@ -632,6 +633,7 @@
         if (playerX >= PATH_LENGTH) {
           finished = true;
           running = false;
+          document.body.classList.remove('game-running');
           const total = mushrooms.length;
           winText.textContent = `Recogiste ${score} punto${score !== 1 ? 's' : ''} de ${total} seta${total !== 1 ? 's' : ''}.`;
           winMsg.classList.add('show');
@@ -670,6 +672,7 @@
       readConfigFromUI();
       running = true;
       finished = false;
+      document.body.classList.add('game-running');
       msg.classList.add('hidden');
       winMsg.classList.remove('show');
       score = 0;

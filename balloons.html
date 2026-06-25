@@ -11,8 +11,8 @@
       margin: 0; height: 100%; overflow: hidden;
       font: 16px/1.4 system-ui, sans-serif;
       background: linear-gradient(180deg, #87ceeb 0%, #b8e6ff 55%, #d4f0ff 100%);
-      cursor: none;
     }
+    body.game-running { cursor: none; }
     #hud {
       position: fixed; top: 16px; left: 16px; right: 16px; z-index: 20;
       display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
@@ -310,6 +310,7 @@
     function startGame() {
       if (running) return;
       running = true;
+      document.body.classList.add('game-running');
       msg.classList.add('hidden');
       score = 0;
       scoreEl.textContent = '0';
