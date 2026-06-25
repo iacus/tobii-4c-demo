@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Explota globos — Eye Tracker</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; overflow: hidden;
+      font: 16px/1.4 system-ui, sans-serif;
+      background: linear-gradient(180deg, #87ceeb 0%, #b8e6ff 55%, #d4f0ff 100%);
+      cursor: none;
+    }
+    #hud {
+      position: fixed; top: 16px; left: 16px; right: 16px; z-index: 20;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      pointer-events: none;
+    }
+    .pill {
+      background: rgba(0,0,0,.55); color: #fff; padding: 8px 14px;
+      border-radius: 999px; backdrop-filter: blur(6px);
+    }
+    #controls {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 20; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+      max-width: calc(100% - 24px);
+    }
+    button {
+      border: 0; border-radius: 12px; padding: 12px 18px;
+      font: inherit; font-weight: 600; cursor: pointer;
+      background: #ff5a7a; color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    }
+    button.secondary { background: #2d3748; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    #arena { position: fixed; inset: 0; }
+    .balloon {
+      position: absolute; width: 72px; height: 92px;
+      transform: translate(-50%, -100%) scale(var(--scale, 1));
+      transition: transform .15s ease, opacity .2s ease;
+      pointer-events: none;
+    }
+    .balloon::before {
+      content: ''; position: absolute; inset: 0 8px 18px 8px;
+      border-radius: 50% 50% 48% 48%;
+      background: radial-gradient(circle at 30% 28%, rgba(255,255,255,.75), transparent 35%),
+                  var(--c, #ff4d6d);
+      box-shadow: inset -8px -12px 20px rgba(0,0,0,.12);
+    }
+    .balloon::after {
+      content: ''; position: absolute; left: 50%; bottom: 8px;
+      width: 2px; height: calc(42px * var(--scale, 1));
+      background: rgba(0,0,0,.35);
+      transform: translateX(-50%);
+    }
+    .balloon .fix-ring {
+      position: absolute; left: 50%; top: 28%;
+      width: calc(56px * var(--scale, 1)); height: calc(56px * var(--scale, 1));
+      margin: -50% 0 0 -50%;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.45);
+      opacity: 0; transform: scale(1.35);
+      transition: opacity .12s ease;
+      pointer-events: none;
+    }
+    .balloon.aiming .fix-ring {
+      opacity: 1;
+      animation: fix-shrink var(--pop-ms, 450ms) linear forwards;
+    }
+    @keyframes fix-shrink {
+      from { transform: scale(1.35); opacity: .9; }
+      to { transform: scale(.55); opacity: .35; }
+    }
+    .balloon .size-tag {
+      position: absolute; top: -6px; right: -4px;
+      font-size: 10px; font-weight: 700; line-height: 1;
+      padding: 3px 6px; border-radius: 999px;
+      background: rgba(0,0,0,.45); color: #fff;
+    }
+    .balloon.pop { transform: translate(-50%, -100%) scale(calc(var(--scale, 1) * 1.4)); opacity: 0; }
+    #gaze {
+      position: fixed; width: 36px; height: 36px; margin: -18px 0 0 -18px;
+      border: 3px solid rgba(255,255,255,.95); border-radius: 50%;
+      box-shadow: 0 0 0 2px rgba(0,0,0,.35), 0 0 18px rgba(255,255,255,.6);
+      pointer-events: none; z-index: 30; opacity: 0;
+      transition: opacity .15s, width .12s ease, height .12s ease, margin .12s ease;
+    }
+    #gaze .gaze-core {
+      position: absolute; inset: 50% auto auto 50%;
+      width: 8px; height: 8px; margin: -4px 0 0 -4px;
+      border-radius: 50%; background: #7df9a8;
+      opacity: 0; transform: scale(.5);
+      transition: opacity .12s ease, transform .12s ease;
+    }
+    #gaze.stable .gaze-core { opacity: 1; transform: scale(1); }
+    #gaze.unstable { border-color: rgba(255,200,120,.95); }
+    #gaze.on { opacity: 1; }
+    #msg {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      background: rgba(0,0,0,.45); z-index: 40; padding: 24px;
+    }
+    #msg.hidden { display: none; }
+    .card {
+      max-width: 420px; background: #111827; color: #f3f4f6;
+      border-radius: 16px; padding: 24px; text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.35);
+    }
+    .card h1 { margin: 0 0 8px; font-size: 1.5rem; }
+    .card p { margin: 0 0 16px; color: #cbd5e1; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="pill">Puntos: <strong id="score">0</strong></div>
+    <div class="pill">Globos: <strong id="left">0</strong></div>
+    <div class="pill">Fijación: <strong id="stability">—</strong></div>
+    <div class="pill" id="status">Sin conectar</div>
+  </div>
+
+  <div id="arena"></div>
+  <div id="gaze"><div class="gaze-core"></div></div>
+
+  <div id="controls">
+    <button id="connect">Conectar eye tracker</button>
+    <button id="calibrate" class="secondary">Calibrar</button>
+    <button id="restart" class="secondary">Reiniciar</button>
+  </div>
+
+  <div id="msg">
+    <div class="card">
+      <h1>Explota globos</h1>
+      <p>Mira un globo hasta que reviente. Los pequeños dan más puntos pero exigen fijación más estable.</p>
+      <button id="start">Empezar</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { GazeClient, gazeToScreen, formatGazeConnectError } from './gaze-lite.js';
+
+    const COLORS = ['#ff4d6d', '#ff9f1c', '#ffd166', '#06d6a0', '#118ab2', '#9b5de5', '#f15bb5'];
+    const SPAWN_EVERY_MS = 1400;
+    const MAX_BALLOONS = 12;
+    const GAZE_HISTORY = 18;
+    const STABILITY_JITTER_PX = 42;
+
+    const SIZE_TIERS = [
+      { id: 'S', label: 'S', scale: 0.58, r: 26, popMs: 700, points: 3, weight: 0.3 },
+      { id: 'M', label: 'M', scale: 1.0, r: 42, popMs: 450, points: 2, weight: 0.45 },
+      { id: 'L', label: 'L', scale: 1.42, r: 58, popMs: 300, points: 1, weight: 0.25 },
+    ];
+
+    const arena = document.getElementById('arena');
+    const gazeEl = document.getElementById('gaze');
+    const scoreEl = document.getElementById('score');
+    const leftEl = document.getElementById('left');
+    const stabilityEl = document.getElementById('stability');
+    const statusEl = document.getElementById('status');
+    const connectBtn = document.getElementById('connect');
+    const calibrateBtn = document.getElementById('calibrate');
+    const restartBtn = document.getElementById('restart');
+    const msg = document.getElementById('msg');
+    const startBtn = document.getElementById('start');
+
+    let client = null;
+    let gaze = { x: -9999, y: -9999, on: false };
+    let gazeTrail = [];
+    let fixation = 0;
+    let score = 0;
+    let balloons = [];
+    let running = false;
+    let spawnTimer = null;
+    let raf = 0;
+    let nextId = 1;
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function rand(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function pickSizeTier() {
+      const roll = Math.random();
+      let acc = 0;
+      for (const tier of SIZE_TIERS) {
+        acc += tier.weight;
+        if (roll <= acc) return tier;
+      }
+      return SIZE_TIERS[1];
+    }
+
+    function pushGazeSample(x, y) {
+      gazeTrail.push({ x, y });
+      if (gazeTrail.length > GAZE_HISTORY) gazeTrail.shift();
+      fixation = computeFixationStability();
+      updateGazeBubble(fixation);
+      stabilityEl.textContent = gaze.on ? `${Math.round(fixation * 100)}%` : '—';
+    }
+
+    function computeFixationStability() {
+      if (gazeTrail.length < 4) return 0;
+      const n = gazeTrail.length;
+      let mx = 0;
+      let my = 0;
+      for (const p of gazeTrail) {
+        mx += p.x;
+        my += p.y;
+      }
+      mx /= n;
+      my /= n;
+      let sum = 0;
+      for (const p of gazeTrail) {
+        sum += Math.hypot(p.x - mx, p.y - my);
+      }
+      const jitter = sum / n;
+      return Math.max(0, Math.min(1, 1 - jitter / STABILITY_JITTER_PX));
+    }
+
+    function updateGazeBubble(stability) {
+      const minD = 18;
+      const maxD = 44;
+      const d = maxD - (maxD - minD) * stability;
+      gazeEl.style.width = `${d}px`;
+      gazeEl.style.height = `${d}px`;
+      gazeEl.style.margin = `${-d / 2}px 0 0 ${-d / 2}px`;
+      gazeEl.classList.toggle('stable', stability >= 0.72);
+      gazeEl.classList.toggle('unstable', stability < 0.4);
+    }
+
+    function spawnBalloon() {
+      if (balloons.length >= MAX_BALLOONS) return;
+      const tier = pickSizeTier();
+      const el = document.createElement('div');
+      el.className = 'balloon';
+      el.style.setProperty('--c', COLORS[Math.floor(Math.random() * COLORS.length)]);
+      el.style.setProperty('--scale', String(tier.scale));
+      el.style.setProperty('--pop-ms', `${tier.popMs}ms`);
+      el.innerHTML = `<div class="fix-ring"></div><span class="size-tag">${tier.label}</span>`;
+      const x = rand(60 + tier.r, window.innerWidth - 60 - tier.r);
+      const y = rand(100 + tier.r, window.innerHeight - 40);
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      arena.appendChild(el);
+      const b = {
+        id: nextId++,
+        el,
+        x,
+        y,
+        r: tier.r,
+        popMs: tier.popMs,
+        points: tier.points,
+        tier: tier.id,
+        dwell: 0,
+        aiming: false,
+        popped: false,
+      };
+      balloons.push(b);
+      leftEl.textContent = String(balloons.filter((bb) => !bb.popped).length);
+    }
+
+    function popBalloon(b) {
+      if (b.popped) return;
+      b.popped = true;
+      b.el.classList.remove('aiming');
+      b.el.classList.add('pop');
+      const bonus = fixation >= 0.75 ? 1 : 0;
+      score += b.points + bonus;
+      scoreEl.textContent = String(score);
+      setTimeout(() => b.el.remove(), 220);
+      leftEl.textContent = String(balloons.filter((bb) => !bb.popped).length);
+    }
+
+    function dist(ax, ay, bx, by) {
+      const dx = ax - bx;
+      const dy = ay - by;
+      return Math.hypot(dx, dy);
+    }
+
+    function tick() {
+      const dt = 16;
+      for (const b of balloons) {
+        if (b.popped) continue;
+        const onTarget = gaze.on && dist(gaze.x, gaze.y, b.x, b.y) < b.r;
+        const stableEnough = fixation >= (b.tier === 'S' ? 0.55 : b.tier === 'M' ? 0.4 : 0.25);
+        if (onTarget && stableEnough) {
+          if (!b.aiming) {
+            b.aiming = true;
+            b.el.classList.add('aiming');
+            b.el.querySelector('.fix-ring')?.style.setProperty('animation-duration', `${b.popMs}ms`);
+          }
+          b.dwell += dt;
+          if (b.dwell >= b.popMs) popBalloon(b);
+        } else {
+          if (b.aiming) {
+            b.aiming = false;
+            b.el.classList.remove('aiming');
+          }
+          b.dwell = Math.max(0, b.dwell - dt * 2);
+        }
+        const progress = Math.min(1, b.dwell / b.popMs);
+        const pulse = 1 + progress * 0.14;
+        b.el.style.transform = `translate(-50%, -100%) scale(calc(var(--scale, 1) * ${pulse}))`;
+      }
+      balloons = balloons.filter((b) => !b.popped || b.el.isConnected);
+      raf = requestAnimationFrame(tick);
+    }
+
+    function startGame() {
+      if (running) return;
+      running = true;
+      msg.classList.add('hidden');
+      score = 0;
+      scoreEl.textContent = '0';
+      gazeTrail = [];
+      fixation = 0;
+      stabilityEl.textContent = '—';
+      arena.innerHTML = '';
+      balloons = [];
+      for (let i = 0; i < 4; i++) spawnBalloon();
+      clearInterval(spawnTimer);
+      spawnTimer = setInterval(spawnBalloon, SPAWN_EVERY_MS);
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(tick);
+    }
+
+    function stopGame() {
+      running = false;
+      clearInterval(spawnTimer);
+      cancelAnimationFrame(raf);
+    }
+
+    async function connectGaze() {
+      if (client) return client;
+      connectBtn.disabled = true;
+      setStatus('Conectando…');
+      try {
+        client = new GazeClient();
+        await client.connect();
+        client.onGaze((pt) => {
+          const p = gazeToScreen(pt);
+          gaze.x = p.x;
+          gaze.y = p.y;
+          gaze.on = true;
+          gazeEl.classList.add('on');
+          gazeEl.style.transform = `translate(${p.x}px, ${p.y}px)`;
+          pushGazeSample(p.x, p.y);
+        });
+        connectBtn.textContent = 'Conectado';
+        setStatus('Mirada activa');
+        return client;
+      } catch (e) {
+        client = null;
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Conectar eye tracker';
+        const text = formatGazeConnectError(e);
+        setStatus('No conectado');
+        alert(text);
+        throw e;
+      }
+    }
+
+    startBtn.addEventListener('click', async () => {
+      try {
+        await connectGaze();
+        startGame();
+      } catch {}
+    });
+
+    connectBtn.addEventListener('click', async () => {
+      try {
+        await connectGaze();
+      } catch {}
+    });
+
+    calibrateBtn.addEventListener('click', () => {
+      window.open('./', '_blank');
+    });
+
+    restartBtn.addEventListener('click', () => {
+      stopGame();
+      startGame();
+    });
+
+    window.addEventListener('beforeunload', () => {
+      stopGame();
+      client?.disconnect();
+    });
+  </script>
+</body>
+</html>

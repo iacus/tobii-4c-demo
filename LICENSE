@@ -1,0 +1,12 @@
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+This project is based on [tobiifree](https://github.com/aetherall/tobiifree)
+and the Tobii 4C WebUSB fork by [george-wyy](https://github.com/george-wyy/tobiifree),
+both licensed under GPL-3.0.
+
+The full license text is available at:
+https://www.gnu.org/licenses/gpl-3.0.txt
+
+Additional application code in this repository (demo patches, gaze-lite.js,
+balloons.html) is also distributed under GPL-3.0.
