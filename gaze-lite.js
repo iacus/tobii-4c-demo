@@ -223,6 +223,8 @@ export class GazeClient {
 
     const bytes = this.core.requestSubscribe(0x500);
     await transport.send(bytes);
+    // Tras elegir el dispositivo USB: fullscreen no debe ir antes de requestDevice().
+    await enterFullscreen();
   }
 
   async driveStateMachine(poll, label) {
@@ -278,7 +280,9 @@ export function gazeToScreen(pt) {
   };
 }
 
-/** Entra en pantalla completa si el navegador lo permite (requiere gesto del usuario). */
+/** Entra en pantalla completa si el navegador lo permite (requiere gesto del usuario).
+ *  Debe llamarse después de `navigator.usb.requestDevice()` en el mismo flujo de conexión:
+ *  si va antes, Chrome consume el gesto y el selector USB falla. */
 export async function enterFullscreen() {
   try {
     if (!document.fullscreenElement) {
