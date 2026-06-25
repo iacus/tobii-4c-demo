@@ -45,9 +45,13 @@ Tras el despliegue, la URL será:
 
 En la demo principal, al final del panel lateral:
 
-1. **Fullscreen** (opcional)
-2. Elige **9 pt**
-3. **Onboard cal** y mira cada punto naranja
+1. **Fullscreen** (recomendado)
+2. **Grant window mgmt** — Chrome necesita saber dónde está la ventana en la pantalla
+3. **Big plane** — el área por defecto (400×300 mm) suele ser pequeña; esto pone 1000×500 mm
+4. Elige **9 pt**
+5. **Onboard cal** y mira cada punto naranja (luego haz clic para capturar)
+
+Si la mirada **no llega a las esquinas**, casi siempre es el **display area** mal ajustado, no el juego. Comprueba que el punto verde de mirada sigue el cursor del ratón en toda la pantalla antes de calibrar.
 
 ## Créditos
 
