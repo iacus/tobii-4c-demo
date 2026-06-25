@@ -223,6 +223,8 @@ export class GazeClient {
 
     const bytes = this.core.requestSubscribe(0x500);
     await transport.send(bytes);
+    // Tras elegir el dispositivo USB: fullscreen no debe ir antes de requestDevice().
+    await enterFullscreen();
   }
 
   async driveStateMachine(poll, label) {
@@ -292,37 +294,22 @@ export function markPreferFullscreenIfActive() {
   if (document.fullscreenElement) markPreferFullscreen();
 }
 
-function wantsFullscreen() {
-  try {
-    return sessionStorage.getItem(FS_PREF_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 function syncFullscreenPreference() {
   if (document.fullscreenElement) markPreferFullscreen();
 }
 
 /**
- * En páginas nuevas (juegos), restaura pantalla completa en el primer clic/tecla
- * si el usuario venía en fullscreen antes de navegar.
+ * Sincroniza la preferencia de pantalla completa al navegar entre páginas.
+ * La restauración efectiva ocurre en `GazeClient.connect()` tras elegir el USB.
  */
 export function initFullscreenRestore() {
   syncFullscreenPreference();
   document.addEventListener('fullscreenchange', syncFullscreenPreference);
-  if (!wantsFullscreen() || document.fullscreenElement) return;
-
-  const restore = () => {
-    document.removeEventListener('click', restore, true);
-    document.removeEventListener('keydown', restore, true);
-    enterFullscreen();
-  };
-  document.addEventListener('click', restore, true);
-  document.addEventListener('keydown', restore, true);
 }
 
-/** Entra en pantalla completa si el navegador lo permite (requiere gesto del usuario). */
+/** Entra en pantalla completa si el navegador lo permite (requiere gesto del usuario).
+ *  Debe llamarse después de `navigator.usb.requestDevice()` en el mismo flujo de conexión:
+ *  si va antes, Chrome consume el gesto y el selector USB falla. */
 export async function enterFullscreen() {
   try {
     if (!document.fullscreenElement) {

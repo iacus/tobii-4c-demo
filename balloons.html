@@ -138,7 +138,7 @@
   <script type="module">
     import {
       GazeClient, gazeToScreen, formatGazeConnectError,
-      enterFullscreen, initFullscreenRestore, markPreferFullscreenIfActive,
+      initFullscreenRestore, markPreferFullscreenIfActive,
     } from './gaze-lite.js';
 
     initFullscreenRestore();
@@ -342,7 +342,6 @@
       connectBtn.disabled = true;
       setStatus('Conectando…');
       try {
-        await enterFullscreen();
         client = new GazeClient();
         await client.connect();
         client.onGaze((pt) => {
