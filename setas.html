@@ -706,7 +706,6 @@
       try {
         client = new GazeClient();
         await client.connect();
-        await enterFullscreen();
         client.onGaze((pt) => {
           const p = gazeToScreen(pt);
           gaze.x = p.x;
