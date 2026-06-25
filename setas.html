@@ -77,6 +77,30 @@
     .card h1 { margin: 0 0 8px; font-size: 1.6rem; color: #c8f060; }
     .card p { margin: 0 0 16px; color: #b8d4a8; line-height: 1.5; }
     .card .emoji { font-size: 3rem; margin-bottom: 12px; }
+    .settings {
+      margin: 0 0 18px; text-align: left;
+      padding: 14px 16px; border-radius: 12px;
+      background: rgba(0,0,0,.22); border: 1px solid rgba(125,223,106,.2);
+    }
+    .settings h2 {
+      margin: 0 0 12px; font-size: .85rem; font-weight: 600;
+      color: #c8f060; text-transform: uppercase; letter-spacing: .04em;
+    }
+    .setting {
+      margin-bottom: 14px;
+    }
+    .setting:last-child { margin-bottom: 0; }
+    .setting label {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 12px; margin-bottom: 6px; color: #d4e8c8; font-size: .92rem;
+    }
+    .setting label strong { color: #fff; font-variant-numeric: tabular-nums; }
+    .setting input[type="range"] {
+      width: 100%; accent-color: #7ddf6a; cursor: pointer;
+    }
+    .setting-hint {
+      margin: 4px 0 0; font-size: .78rem; color: #8fb88a;
+    }
     #win-msg {
       position: fixed; inset: 0; display: none; place-items: center;
       background: rgba(0,0,0,.55); z-index: 45; padding: 24px;
@@ -108,6 +132,25 @@
       <div class="emoji" aria-hidden="true">🍄</div>
       <h1>Camino de setas</h1>
       <p>Camina por el bosque y recoge setas mirándolas. Avanzas solo — ¡no te pierdas ninguna!</p>
+      <div class="settings" aria-label="Ajustes de velocidad">
+        <h2>Velocidades</h2>
+        <div class="setting">
+          <label for="walk-speed">
+            <span>Velocidad del camino</span>
+            <strong id="walk-speed-val">0.75×</strong>
+          </label>
+          <input id="walk-speed" type="range" min="0.3" max="2" step="0.05" value="0.75" />
+          <p class="setting-hint">Más bajo = caminas más despacio por el sendero.</p>
+        </div>
+        <div class="setting">
+          <label for="collect-time">
+            <span>Tiempo para recoger seta</span>
+            <strong id="collect-time-val">450 ms</strong>
+          </label>
+          <input id="collect-time" type="range" min="200" max="900" step="25" value="450" />
+          <p class="setting-hint">Cuánto debes mirar una seta antes de recogerla.</p>
+        </div>
+      </div>
       <button id="start">Empezar</button>
     </div>
   </div>
@@ -125,12 +168,14 @@
     import { GazeClient, gazeToScreen, formatGazeConnectError } from './gaze-lite.js';
 
     const PATH_LENGTH = 5200;
-    const WALK_SPEED = 1.35;
     const PATH_WIDTH = 72;
     const GAZE_HISTORY = 18;
     const STABILITY_JITTER_PX = 42;
-    const COLLECT_MS = 380;
     const MUSHROOM_HIT_R = 34;
+    const CONFIG_KEY = 'setas-speed-config';
+    const DEFAULT_CONFIG = { walkSpeed: 0.75, collectMs: 450 };
+
+    let gameConfig = { ...DEFAULT_CONFIG };
 
     const MUSHROOM_TYPES = [
       { cap: '#e63946', spots: '#fff5e6', stem: '#f4e4bc', points: 1 },
@@ -156,6 +201,10 @@
     const winText = document.getElementById('win-text');
     const startBtn = document.getElementById('start');
     const playAgainBtn = document.getElementById('play-again');
+    const walkSpeedInput = document.getElementById('walk-speed');
+    const walkSpeedVal = document.getElementById('walk-speed-val');
+    const collectTimeInput = document.getElementById('collect-time');
+    const collectTimeVal = document.getElementById('collect-time-val');
 
     let client = null;
     let gaze = { x: -9999, y: -9999, on: false };
@@ -190,6 +239,53 @@
 
     function setStatus(text) {
       statusEl.textContent = text;
+    }
+
+    function formatWalkSpeed(speed) {
+      return `${speed.toFixed(2).replace(/\.?0+$/, '')}×`;
+    }
+
+    function readConfigFromUI() {
+      gameConfig = {
+        walkSpeed: Number(walkSpeedInput.value),
+        collectMs: Number(collectTimeInput.value),
+      };
+      try {
+        sessionStorage.setItem(CONFIG_KEY, JSON.stringify(gameConfig));
+      } catch {}
+      return gameConfig;
+    }
+
+    function applyConfigToUI(config) {
+      walkSpeedInput.value = String(config.walkSpeed);
+      collectTimeInput.value = String(config.collectMs);
+      walkSpeedVal.textContent = formatWalkSpeed(config.walkSpeed);
+      collectTimeVal.textContent = `${config.collectMs} ms`;
+    }
+
+    function loadSavedConfig() {
+      try {
+        const raw = sessionStorage.getItem(CONFIG_KEY);
+        if (!raw) return { ...DEFAULT_CONFIG };
+        const parsed = JSON.parse(raw);
+        return {
+          walkSpeed: Number.isFinite(parsed.walkSpeed)
+            ? Math.min(2, Math.max(0.3, parsed.walkSpeed))
+            : DEFAULT_CONFIG.walkSpeed,
+          collectMs: Number.isFinite(parsed.collectMs)
+            ? Math.min(900, Math.max(200, parsed.collectMs))
+            : DEFAULT_CONFIG.collectMs,
+        };
+      } catch {
+        return { ...DEFAULT_CONFIG };
+      }
+    }
+
+    function bindConfigControls() {
+      const sync = () => applyConfigToUI(readConfigFromUI());
+      walkSpeedInput.addEventListener('input', sync);
+      collectTimeInput.addEventListener('input', sync);
+      applyConfigToUI(loadSavedConfig());
     }
 
     function pushGazeSample(x, y) {
@@ -399,7 +495,7 @@
       ctx.globalAlpha = alpha;
 
       if (m.aiming && !m.collected) {
-        const prog = Math.min(1, m.dwell / COLLECT_MS);
+        const prog = Math.min(1, m.dwell / gameConfig.collectMs);
         ctx.strokeStyle = `rgba(200,240,96,${0.4 + prog * 0.5})`;
         ctx.lineWidth = 3;
         ctx.beginPath();
@@ -522,7 +618,7 @@
       const dt = 16;
 
       if (running && !finished) {
-        playerY += WALK_SPEED;
+        playerY += gameConfig.walkSpeed;
         cameraY = playerY - canvas.height * 0.62;
         progressFill.style.width = `${Math.min(100, (playerY / PATH_LENGTH) * 100)}%`;
 
@@ -547,7 +643,7 @@
         if (onTarget && stableEnough) {
           if (!m.aiming) m.aiming = true;
           m.dwell += dt;
-          if (m.dwell >= COLLECT_MS) collectMushroom(m);
+          if (m.dwell >= gameConfig.collectMs) collectMushroom(m);
         } else {
           m.aiming = false;
           m.dwell = Math.max(0, m.dwell - dt * 2.5);
@@ -564,6 +660,7 @@
     }
 
     function startGame() {
+      readConfigFromUI();
       running = true;
       finished = false;
       msg.classList.add('hidden');
@@ -647,6 +744,7 @@
       client?.disconnect();
     });
 
+    bindConfigControls();
     resize();
   </script>
 </body>
