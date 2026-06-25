@@ -165,7 +165,12 @@
   </div>
 
   <script type="module">
-    import { GazeClient, gazeToScreen, formatGazeConnectError, enterFullscreen } from './gaze-lite.js';
+    import {
+      GazeClient, gazeToScreen, formatGazeConnectError,
+      enterFullscreen, initFullscreenRestore, markPreferFullscreenIfActive,
+    } from './gaze-lite.js';
+
+    initFullscreenRestore();
 
     const PATH_LENGTH = 5200;
     const PATH_WIDTH = 72;
@@ -733,6 +738,7 @@
     });
 
     calibrateBtn.addEventListener('click', () => {
+      markPreferFullscreenIfActive();
       client?.disconnect();
       window.location.href = './';
     });
