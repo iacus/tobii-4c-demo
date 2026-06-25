@@ -136,7 +136,7 @@
   </div>
 
   <script type="module">
-    import { GazeClient, gazeToScreen, formatGazeConnectError } from './gaze-lite.js';
+    import { GazeClient, gazeToScreen, formatGazeConnectError, enterFullscreen } from './gaze-lite.js';
 
     const COLORS = ['#ff4d6d', '#ff9f1c', '#ffd166', '#06d6a0', '#118ab2', '#9b5de5', '#f15bb5'];
     const SPAWN_EVERY_MS = 1400;
@@ -336,6 +336,7 @@
       connectBtn.disabled = true;
       setStatus('Conectando…');
       try {
+        await enterFullscreen();
         client = new GazeClient();
         await client.connect();
         client.onGaze((pt) => {

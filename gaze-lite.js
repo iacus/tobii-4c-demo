@@ -277,3 +277,14 @@ export function gazeToScreen(pt) {
     y: pt.y * window.innerHeight,
   };
 }
+
+/** Entra en pantalla completa si el navegador lo permite (requiere gesto del usuario). */
+export async function enterFullscreen() {
+  try {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+    }
+  } catch (err) {
+    console.warn('No se pudo entrar en pantalla completa:', err);
+  }
+}

@@ -122,7 +122,7 @@
   </div>
 
   <script type="module">
-    import { GazeClient, gazeToScreen, formatGazeConnectError } from './gaze-lite.js';
+    import { GazeClient, gazeToScreen, formatGazeConnectError, enterFullscreen } from './gaze-lite.js';
 
     const PATH_LENGTH = 5200;
     const WALK_SPEED = 1.35;
@@ -592,6 +592,7 @@
       connectBtn.disabled = true;
       setStatus('Conectando…');
       try {
+        await enterFullscreen();
         client = new GazeClient();
         await client.connect();
         client.onGaze((pt) => {
