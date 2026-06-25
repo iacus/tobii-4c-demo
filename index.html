@@ -72,8 +72,12 @@
         font-variant-numeric: tabular-nums; }
       #da .group { color: #5a5a70; font-size: 10px; text-transform: uppercase;
         letter-spacing: 0.05em; margin: 6px 0 2px 0; }
-      #da .btns { display: flex; gap: 6px; margin-top: 8px; }
-      #da .btns button { flex: 1; font-size: 11px; padding: 6px 8px; }
+      #da .btns { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+      #da .btns button { flex: 1 1 auto; font-size: 11px; padding: 6px 8px; min-width: 7.5rem; }
+      #da .presets { margin: 10px 0 4px; }
+      #da .presets-note {
+        margin: 0 0 8px; font-size: 10px; color: #7a8a7a; line-height: 1.4;
+      }
       #da .btns button.secondary { background: #2a2a36; }
       #da .btns button.secondary:hover { background: #3a3a48; }
       #da .lock { display: flex; align-items: center; gap: 6px; color: #b0b0c0;
@@ -193,6 +197,7 @@
       }
     </style>
     <script type="module" crossorigin src="./index-CAf84N0S.js"></script>
+    <script type="module" src="./demo-display-ui.js"></script>
     <script type="module">
       import { markPreferFullscreenIfActive } from './gaze-lite.js';
       document.querySelectorAll('#games .game-card').forEach((link) => {
@@ -226,11 +231,17 @@
       <div id="da">
         <h2>Display area (mm)</h2>
         <p id="cal-help" style="margin:0 0 10px 0;font-size:10px;color:#9ab89a;line-height:1.45">
-          Si la mirada no llega a las esquinas: 1) <strong>Fullscreen</strong> ·
-          2) <strong>Grant window mgmt</strong> · 3) <strong>Big plane</strong> ·
-          4) <strong>Onboard cal</strong> (9 pt). El área por defecto (400×300&nbsp;mm)
-          suele ser demasiado pequeña para tu monitor.
+          Esta sección aparece al <strong>conectar</strong> el Tobii. Si la mirada no llega a las esquinas:
+          1) <strong>Fullscreen</strong> (aplica big plane auto) · 2) <strong>Grant window mgmt</strong> ·
+          3) preset abajo · 4) <strong>Onboard cal</strong> (9 pt).
         </p>
+        <div class="presets">
+          <p class="presets-note">Presets de área (mm). Al entrar en pantalla completa se aplica big plane automáticamente.</p>
+          <div class="btns">
+            <button id="da-big-plane" class="secondary" type="button">Big plane</button>
+            <button id="da-mbp16" class="secondary" type="button">MacBook Pro 16"</button>
+          </div>
+        </div>
         <label class="lock"><input type="checkbox" id="da-lock" checked /> Lock to plane (rectangular, axis-aligned)</label>
         <div class="grid" id="rect-grid"></div>
         <div class="grid" id="tilt-row" style="margin-top:6px">
@@ -260,7 +271,6 @@
           <button id="da-collect2" class="secondary" type="button">Collect (2-plane)</button>
           <button id="da-load" class="secondary" type="button">Load &amp; apply</button>
           <button id="da-load-model" class="secondary" type="button">Load model</button>
-          <button id="da-big-plane" class="secondary" type="button">Big plane</button>
         </div>
         <pre id="diag-out" style="margin:8px 0 0 0; color:#b0b0c0; font-size:10px; white-space:pre-wrap; line-height:1.4;"></pre>
       </div>

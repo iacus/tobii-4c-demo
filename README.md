@@ -45,9 +45,9 @@ Tras el despliegue, la URL será:
 
 En la demo principal, al final del panel lateral:
 
-1. **Fullscreen** (recomendado)
+1. **Fullscreen** (recomendado) — al entrar en pantalla completa se aplica **big plane** automáticamente (ancho 1000 mm, alto según aspecto de la pantalla)
 2. **Grant window mgmt** — Chrome necesita saber dónde está la ventana en la pantalla
-3. **Big plane** — el área por defecto (400×300 mm) suele ser pequeña; esto pone 1000×500 mm
+3. Si usas **MacBook Pro 16"**, prueba el preset **MacBook Pro 16"** (≈400×259 mm)
 4. Elige **9 pt**
 5. **Onboard cal** y mira cada punto naranja (luego haz clic para capturar)
 
