@@ -6,6 +6,7 @@ Incluye:
 
 - **Demo principal** — conexión USB, visualización de mirada, calibración onboard
 - **Explota globos** — minijuego para practicar fijación con globos de distinto tamaño
+- **Camino de setas** — recorre un sendero en el bosque y recoge setas con la mirada
 
 ## Requisitos
 
@@ -25,7 +26,8 @@ ruby -run -e httpd . -p 8765 -b 127.0.0.1
 Abre en Chrome:
 
 - Demo: http://127.0.0.1:8765/
-- Juego: http://127.0.0.1:8765/balloons.html
+- Globos: http://127.0.0.1:8765/balloons.html
+- Setas: http://127.0.0.1:8765/setas.html
 
 ## GitHub Pages
 

@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Camino de setas — Eye Tracker</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; height: 100%; overflow: hidden;
+      font: 16px/1.4 system-ui, sans-serif;
+      background: #1a3a1a; cursor: none;
+    }
+    #game-canvas {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      display: block;
+    }
+    #hud {
+      position: fixed; top: 16px; left: 16px; right: 16px; z-index: 20;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      pointer-events: none;
+    }
+    .pill {
+      background: rgba(0,0,0,.55); color: #fff; padding: 8px 14px;
+      border-radius: 999px; backdrop-filter: blur(6px);
+    }
+    #progress-bar {
+      position: fixed; top: 0; left: 0; right: 0; height: 5px; z-index: 25;
+      background: rgba(0,0,0,.3);
+    }
+    #progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #7ddf6a, #c8f060);
+      transition: width .2s ease;
+    }
+    #controls {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      z-index: 20; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+      max-width: calc(100% - 24px);
+    }
+    button {
+      border: 0; border-radius: 12px; padding: 12px 18px;
+      font: inherit; font-weight: 600; cursor: pointer;
+      background: #5a9e3a; color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.25);
+    }
+    button.secondary { background: #2d3748; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    #gaze {
+      position: fixed; width: 36px; height: 36px; margin: -18px 0 0 -18px;
+      border: 3px solid rgba(255,255,255,.95); border-radius: 50%;
+      box-shadow: 0 0 0 2px rgba(0,0,0,.35), 0 0 18px rgba(255,255,255,.6);
+      pointer-events: none; z-index: 30; opacity: 0;
+      transition: opacity .15s, width .12s ease, height .12s ease, margin .12s ease;
+    }
+    #gaze .gaze-core {
+      position: absolute; inset: 50% auto auto 50%;
+      width: 8px; height: 8px; margin: -4px 0 0 -4px;
+      border-radius: 50%; background: #7df9a8;
+      opacity: 0; transform: scale(.5);
+      transition: opacity .12s ease, transform .12s ease;
+    }
+    #gaze.stable .gaze-core { opacity: 1; transform: scale(1); }
+    #gaze.unstable { border-color: rgba(255,200,120,.95); }
+    #gaze.on { opacity: 1; }
+    #msg {
+      position: fixed; inset: 0; display: grid; place-items: center;
+      background: rgba(0,0,0,.5); z-index: 40; padding: 24px;
+    }
+    #msg.hidden { display: none; }
+    .card {
+      max-width: 440px; background: #1a2e1a; color: #f3f4f6;
+      border-radius: 16px; padding: 28px; text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,.4);
+      border: 1px solid rgba(125,223,106,.25);
+    }
+    .card h1 { margin: 0 0 8px; font-size: 1.6rem; color: #c8f060; }
+    .card p { margin: 0 0 16px; color: #b8d4a8; line-height: 1.5; }
+    .card .emoji { font-size: 3rem; margin-bottom: 12px; }
+    #win-msg {
+      position: fixed; inset: 0; display: none; place-items: center;
+      background: rgba(0,0,0,.55); z-index: 45; padding: 24px;
+    }
+    #win-msg.show { display: grid; }
+    #win-msg .card h1 { color: #ffd166; }
+  </style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <div id="progress-bar"><div id="progress-fill"></div></div>
+
+  <div id="hud">
+    <div class="pill">Setas: <strong id="score">0</strong> / <strong id="total">0</strong></div>
+    <div class="pill">Fijación: <strong id="stability">—</strong></div>
+    <div class="pill" id="status">Sin conectar</div>
+  </div>
+
+  <div id="gaze"><div class="gaze-core"></div></div>
+
+  <div id="controls">
+    <button id="connect">Conectar eye tracker</button>
+    <button id="calibrate" class="secondary">Calibrar</button>
+    <button id="restart" class="secondary">Reiniciar</button>
+  </div>
+
+  <div id="msg">
+    <div class="card">
+      <div class="emoji" aria-hidden="true">🍄</div>
+      <h1>Camino de setas</h1>
+      <p>Camina por el bosque y recoge setas mirándolas. Avanzas solo — ¡no te pierdas ninguna!</p>
+      <button id="start">Empezar</button>
+    </div>
+  </div>
+
+  <div id="win-msg">
+    <div class="card">
+      <div class="emoji" aria-hidden="true">🌲</div>
+      <h1>¡Llegaste al final!</h1>
+      <p id="win-text">Recogiste 0 de 0 setas.</p>
+      <button id="play-again">Jugar otra vez</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { GazeClient, gazeToScreen, formatGazeConnectError } from './gaze-lite.js';
+
+    const PATH_LENGTH = 5200;
+    const WALK_SPEED = 1.35;
+    const PATH_WIDTH = 72;
+    const GAZE_HISTORY = 18;
+    const STABILITY_JITTER_PX = 42;
+    const COLLECT_MS = 380;
+    const MUSHROOM_HIT_R = 34;
+
+    const MUSHROOM_TYPES = [
+      { cap: '#e63946', spots: '#fff5e6', stem: '#f4e4bc', points: 1 },
+      { cap: '#ff6b35', spots: '#ffe8d6', stem: '#f0dcc0', points: 1 },
+      { cap: '#9b5de5', spots: '#f0e6ff', stem: '#e8dcc8', points: 2 },
+      { cap: '#ffd166', spots: '#fff8e6', stem: '#f5ecd8', points: 2 },
+      { cap: '#06d6a0', spots: '#e6fff5', stem: '#e0d8c8', points: 3 },
+    ];
+
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const gazeEl = document.getElementById('gaze');
+    const scoreEl = document.getElementById('score');
+    const totalEl = document.getElementById('total');
+    const stabilityEl = document.getElementById('stability');
+    const statusEl = document.getElementById('status');
+    const progressFill = document.getElementById('progress-fill');
+    const connectBtn = document.getElementById('connect');
+    const calibrateBtn = document.getElementById('calibrate');
+    const restartBtn = document.getElementById('restart');
+    const msg = document.getElementById('msg');
+    const winMsg = document.getElementById('win-msg');
+    const winText = document.getElementById('win-text');
+    const startBtn = document.getElementById('start');
+    const playAgainBtn = document.getElementById('play-again');
+
+    let client = null;
+    let gaze = { x: -9999, y: -9999, on: false };
+    let gazeTrail = [];
+    let fixation = 0;
+    let score = 0;
+    let mushrooms = [];
+    let trees = [];
+    let flowers = [];
+    let running = false;
+    let raf = 0;
+    let playerY = 0;
+    let cameraY = 0;
+    let finished = false;
+    let popEffects = [];
+
+    function pathX(worldY) {
+      return canvas.width * 0.5
+        + Math.sin(worldY * 0.0045) * canvas.width * 0.22
+        + Math.sin(worldY * 0.011 + 1.2) * canvas.width * 0.08;
+    }
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      if (!running) drawFrame();
+    }
+
+    function rand(min, max) {
+      return min + Math.random() * (max - min);
+    }
+
+    function setStatus(text) {
+      statusEl.textContent = text;
+    }
+
+    function pushGazeSample(x, y) {
+      gazeTrail.push({ x, y });
+      if (gazeTrail.length > GAZE_HISTORY) gazeTrail.shift();
+      fixation = computeFixationStability();
+      updateGazeBubble(fixation);
+      stabilityEl.textContent = gaze.on ? `${Math.round(fixation * 100)}%` : '—';
+    }
+
+    function computeFixationStability() {
+      if (gazeTrail.length < 4) return 0;
+      const n = gazeTrail.length;
+      let mx = 0, my = 0;
+      for (const p of gazeTrail) { mx += p.x; my += p.y; }
+      mx /= n; my /= n;
+      let sum = 0;
+      for (const p of gazeTrail) sum += Math.hypot(p.x - mx, p.y - my);
+      return Math.max(0, Math.min(1, 1 - (sum / n) / STABILITY_JITTER_PX));
+    }
+
+    function updateGazeBubble(stability) {
+      const minD = 18, maxD = 44;
+      const d = maxD - (maxD - minD) * stability;
+      gazeEl.style.width = `${d}px`;
+      gazeEl.style.height = `${d}px`;
+      gazeEl.style.margin = `${-d / 2}px 0 0 ${-d / 2}px`;
+      gazeEl.classList.toggle('stable', stability >= 0.65);
+      gazeEl.classList.toggle('unstable', stability < 0.4);
+    }
+
+    function worldToScreen(wx, wy) {
+      return { x: wx, y: wy - cameraY };
+    }
+
+    function generateWorld() {
+      mushrooms = [];
+      trees = [];
+      flowers = [];
+
+      const step = 180;
+      for (let y = 320; y < PATH_LENGTH; y += step) {
+        const px = pathX(y);
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const offset = rand(55, 110) * side;
+        const type = MUSHROOM_TYPES[Math.floor(Math.random() * MUSHROOM_TYPES.length)];
+        mushrooms.push({
+          x: px + offset,
+          y,
+          type,
+          collected: false,
+          dwell: 0,
+          aiming: false,
+          pop: 0,
+          wobble: rand(0, Math.PI * 2),
+        });
+      }
+
+      for (let y = 0; y < PATH_LENGTH + 400; y += rand(90, 160)) {
+        const px = pathX(y);
+        const side = Math.random() < 0.5 ? -1 : 1;
+        trees.push({
+          x: px + side * rand(130, 280),
+          y,
+          r: rand(28, 52),
+          hue: rand(100, 145),
+        });
+      }
+
+      for (let y = 100; y < PATH_LENGTH; y += rand(60, 120)) {
+        const px = pathX(y);
+        flowers.push({
+          x: px + rand(-200, 200),
+          y,
+          color: ['#ff6b9d', '#ffd166', '#a8e6cf', '#dda0dd', '#87ceeb'][Math.floor(Math.random() * 5)],
+          size: rand(4, 8),
+        });
+      }
+
+      totalEl.textContent = String(mushrooms.length);
+    }
+
+    function drawBackground() {
+      const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      grad.addColorStop(0, '#2d5a27');
+      grad.addColorStop(0.5, '#3d7a35');
+      grad.addColorStop(1, '#4a8f40');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function drawTrees() {
+      const viewTop = cameraY - 80;
+      const viewBot = cameraY + canvas.height + 80;
+      for (const t of trees) {
+        if (t.y < viewTop || t.y > viewBot) continue;
+        const s = worldToScreen(t.x, t.y);
+        ctx.save();
+        ctx.translate(s.x, s.y);
+        ctx.fillStyle = `hsl(${t.hue}, 35%, 28%)`;
+        ctx.beginPath();
+        ctx.ellipse(0, t.r * 0.3, t.r * 0.35, t.r * 0.9, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `hsl(${t.hue}, 50%, 32%)`;
+        ctx.beginPath();
+        ctx.moveTo(0, -t.r * 1.1);
+        ctx.lineTo(t.r * 0.9, t.r * 0.5);
+        ctx.lineTo(-t.r * 0.9, t.r * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = `hsl(${t.hue}, 55%, 38%)`;
+        ctx.beginPath();
+        ctx.moveTo(0, -t.r * 0.7);
+        ctx.lineTo(t.r * 0.65, t.r * 0.15);
+        ctx.lineTo(-t.r * 0.65, t.r * 0.15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawPath() {
+      const viewTop = cameraY - 100;
+      const viewBot = cameraY + canvas.height + 100;
+      const startY = Math.max(0, Math.floor(viewTop / 20) * 20);
+      const points = [];
+      for (let y = startY; y <= viewBot; y += 20) {
+        points.push({ x: pathX(y), y });
+      }
+      if (points.length < 2) return;
+
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.strokeStyle = 'rgba(60,40,20,.25)';
+      ctx.lineWidth = PATH_WIDTH + 14;
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const s = worldToScreen(points[i].x, points[i].y);
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = '#8b6914';
+      ctx.lineWidth = PATH_WIDTH + 4;
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const s = worldToScreen(points[i].x, points[i].y);
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      }
+      ctx.stroke();
+
+      ctx.strokeStyle = '#c4a035';
+      ctx.lineWidth = PATH_WIDTH - 8;
+      ctx.beginPath();
+      for (let i = 0; i < points.length; i++) {
+        const s = worldToScreen(points[i].x, points[i].y);
+        if (i === 0) ctx.moveTo(s.x, s.y);
+        else ctx.lineTo(s.x, s.y);
+      }
+      ctx.stroke();
+
+      for (let y = startY; y <= viewBot; y += 48) {
+        const px = pathX(y);
+        const s = worldToScreen(px, y);
+        ctx.fillStyle = 'rgba(90,70,30,.18)';
+        ctx.beginPath();
+        ctx.ellipse(s.x, s.y, 3, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawFlowers() {
+      const viewTop = cameraY - 40;
+      const viewBot = cameraY + canvas.height + 40;
+      for (const f of flowers) {
+        if (f.y < viewTop || f.y > viewBot) continue;
+        const s = worldToScreen(f.x, f.y);
+        ctx.fillStyle = f.color;
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(s.x + Math.cos(a) * f.size, s.y + Math.sin(a) * f.size, f.size * 0.7, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, f.size * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawMushroom(m, time) {
+      if (m.collected && m.pop <= 0) return;
+      const s = worldToScreen(m.x, m.y);
+      if (s.y < -60 || s.y > canvas.height + 60) return;
+
+      const wobble = Math.sin(time * 0.003 + m.wobble) * 3;
+      const scale = m.collected ? 1 + m.pop * 0.8 : 1 + (m.aiming ? 0.12 : 0);
+      const alpha = m.collected ? Math.max(0, 1 - m.pop) : 1;
+
+      ctx.save();
+      ctx.translate(s.x + wobble, s.y);
+      ctx.scale(scale, scale);
+      ctx.globalAlpha = alpha;
+
+      if (m.aiming && !m.collected) {
+        const prog = Math.min(1, m.dwell / COLLECT_MS);
+        ctx.strokeStyle = `rgba(200,240,96,${0.4 + prog * 0.5})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, -8, 30 - prog * 12, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = m.type.stem;
+      ctx.beginPath();
+      ctx.roundRect(-7, -4, 14, 22, 4);
+      ctx.fill();
+
+      ctx.fillStyle = m.type.cap;
+      ctx.beginPath();
+      ctx.ellipse(0, -14, 22, 16, 0, Math.PI, 0);
+      ctx.fill();
+
+      ctx.fillStyle = m.type.spots;
+      for (const spot of [[-8, -18, 4], [6, -20, 3], [-2, -12, 2.5], [10, -14, 2]]) {
+        ctx.beginPath();
+        ctx.arc(spot[0], spot[1], spot[2], 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    function drawPlayer() {
+      const px = pathX(playerY);
+      const s = worldToScreen(px, playerY);
+      const bob = Math.sin(Date.now() * 0.008) * 3;
+
+      ctx.save();
+      ctx.translate(s.x, s.y + bob);
+
+      ctx.fillStyle = 'rgba(0,0,0,.2)';
+      ctx.beginPath();
+      ctx.ellipse(0, 18, 14, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#4a7c59';
+      ctx.beginPath();
+      ctx.ellipse(0, 4, 12, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#f4c99b';
+      ctx.beginPath();
+      ctx.arc(0, -14, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#5a3e2b';
+      ctx.beginPath();
+      ctx.arc(0, -16, 11, Math.PI + 0.3, Math.PI * 2 - 0.3);
+      ctx.fill();
+
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(-4, -14, 1.8, 0, Math.PI * 2);
+      ctx.arc(4, -14, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawFinish() {
+      const fy = PATH_LENGTH - 40;
+      if (fy < cameraY - 100 || fy > cameraY + canvas.height + 100) return;
+      const px = pathX(fy);
+      const s = worldToScreen(px, fy);
+
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.fillStyle = '#5a3e2b';
+      ctx.fillRect(-40, -10, 80, 12);
+      ctx.fillStyle = '#7ddf6a';
+      ctx.font = 'bold 14px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('META', 0, -18);
+      ctx.restore();
+    }
+
+    function drawPopEffects() {
+      for (const e of popEffects) {
+        const s = worldToScreen(e.x, e.y);
+        const life = 1 - e.t / 500;
+        if (life <= 0) continue;
+        ctx.save();
+        ctx.globalAlpha = life;
+        ctx.font = `bold ${16 + e.t * 0.04}px system-ui`;
+        ctx.fillStyle = '#c8f060';
+        ctx.textAlign = 'center';
+        ctx.fillText(`+${e.points}`, s.x, s.y - e.t * 0.08);
+        ctx.restore();
+      }
+    }
+
+    function drawFrame() {
+      drawBackground();
+      drawTrees();
+      drawPath();
+      drawFlowers();
+      const now = Date.now();
+      for (const m of mushrooms) drawMushroom(m, now);
+      drawFinish();
+      drawPlayer();
+      drawPopEffects();
+    }
+
+    function collectMushroom(m) {
+      if (m.collected) return;
+      m.collected = true;
+      m.aiming = false;
+      m.pop = 0;
+      score += m.type.points;
+      scoreEl.textContent = String(score);
+      popEffects.push({ x: m.x, y: m.y, points: m.type.points, t: 0 });
+    }
+
+    function tick() {
+      const dt = 16;
+
+      if (running && !finished) {
+        playerY += WALK_SPEED;
+        cameraY = playerY - canvas.height * 0.62;
+        progressFill.style.width = `${Math.min(100, (playerY / PATH_LENGTH) * 100)}%`;
+
+        if (playerY >= PATH_LENGTH) {
+          finished = true;
+          running = false;
+          const total = mushrooms.length;
+          winText.textContent = `Recogiste ${score} punto${score !== 1 ? 's' : ''} de ${total} seta${total !== 1 ? 's' : ''}.`;
+          winMsg.classList.add('show');
+        }
+      }
+
+      for (const m of mushrooms) {
+        if (m.collected) {
+          m.pop += dt / 400;
+          continue;
+        }
+        const s = worldToScreen(m.x, m.y);
+        const onTarget = gaze.on && Math.hypot(gaze.x - s.x, gaze.y - s.y) < MUSHROOM_HIT_R;
+        const stableEnough = fixation >= 0.35;
+
+        if (onTarget && stableEnough) {
+          if (!m.aiming) m.aiming = true;
+          m.dwell += dt;
+          if (m.dwell >= COLLECT_MS) collectMushroom(m);
+        } else {
+          m.aiming = false;
+          m.dwell = Math.max(0, m.dwell - dt * 2.5);
+        }
+      }
+
+      popEffects = popEffects.filter((e) => {
+        e.t += dt;
+        return e.t < 500;
+      });
+
+      drawFrame();
+      raf = requestAnimationFrame(tick);
+    }
+
+    function startGame() {
+      running = true;
+      finished = false;
+      msg.classList.add('hidden');
+      winMsg.classList.remove('show');
+      score = 0;
+      scoreEl.textContent = '0';
+      playerY = 0;
+      cameraY = -canvas.height * 0.62;
+      gazeTrail = [];
+      fixation = 0;
+      stabilityEl.textContent = '—';
+      popEffects = [];
+      progressFill.style.width = '0%';
+      generateWorld();
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(tick);
+    }
+
+    function stopGame() {
+      running = false;
+      cancelAnimationFrame(raf);
+    }
+
+    async function connectGaze() {
+      if (client) return client;
+      connectBtn.disabled = true;
+      setStatus('Conectando…');
+      try {
+        client = new GazeClient();
+        await client.connect();
+        client.onGaze((pt) => {
+          const p = gazeToScreen(pt);
+          gaze.x = p.x;
+          gaze.y = p.y;
+          gaze.on = true;
+          gazeEl.classList.add('on');
+          gazeEl.style.transform = `translate(${p.x}px, ${p.y}px)`;
+          pushGazeSample(p.x, p.y);
+        });
+        connectBtn.textContent = 'Conectado';
+        setStatus('Mirada activa');
+        return client;
+      } catch (e) {
+        client = null;
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Conectar eye tracker';
+        setStatus('No conectado');
+        alert(formatGazeConnectError(e));
+        throw e;
+      }
+    }
+
+    startBtn.addEventListener('click', async () => {
+      try {
+        await connectGaze();
+        startGame();
+      } catch {}
+    });
+
+    connectBtn.addEventListener('click', async () => {
+      try { await connectGaze(); } catch {}
+    });
+
+    calibrateBtn.addEventListener('click', () => {
+      window.open('./', '_blank');
+    });
+
+    restartBtn.addEventListener('click', () => {
+      stopGame();
+      startGame();
+    });
+
+    playAgainBtn.addEventListener('click', () => {
+      startGame();
+    });
+
+    window.addEventListener('resize', resize);
+    window.addEventListener('beforeunload', () => {
+      stopGame();
+      client?.disconnect();
+    });
+
+    resize();
+  </script>
+</body>
+</html>
