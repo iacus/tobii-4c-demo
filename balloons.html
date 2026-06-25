@@ -375,7 +375,8 @@
     });
 
     calibrateBtn.addEventListener('click', () => {
-      window.open('./', '_blank');
+      client?.disconnect();
+      window.location.href = './';
     });
 
     restartBtn.addEventListener('click', () => {
